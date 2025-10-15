@@ -1,0 +1,36 @@
+# Netlify Configuration for TikTok OAuth Proxy
+# Documentation: https://docs.netlify.com/configure-builds/file-based-configuration/
+
+[build]
+  # Publish directory - serves index.html for local testing
+  publish = "."
+
+[functions]
+  # Directory containing Netlify Functions
+  directory = "netlify/functions"
+  
+  # Runtime environment
+  node_bundler = "esbuild"
+
+[dev]
+  # Local development configuration
+  # Netlify Dev will serve index.html and run functions
+  command = ""
+  port = 8888
+  publish = "."
+  functionsPort = 8888
+
+# Security Headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    
+# Redirect configuration (optional - if you want a root redirect)
+# [[redirects]]
+#   from = "/*"
+#   to = "/.netlify/functions/tiktok_auth"
+#   status = 200
