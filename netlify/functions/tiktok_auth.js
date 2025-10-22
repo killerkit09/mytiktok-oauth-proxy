@@ -17,6 +17,30 @@ exports.handler = async function(event, context) {
   // Route 1: Initiate OAuth flow
   if (event.httpMethod === 'GET' && path.includes('/oauth')) {
     try {
+      // Debug: Log environment variables
+      console.log('Environment variables:', {
+        TIKTOK_CLIENT_KEY: process.env.TIKTOK_CLIENT_KEY ? 'SET' : 'UNDEFINED',
+        TIKTOK_CLIENT_SECRET: process.env.TIKTOK_CLIENT_SECRET ? 'SET' : 'UNDEFINED',
+        URL: process.env.URL ? 'SET' : 'UNDEFINED'
+      });
+      
+      // Check if client key is available
+      if (!process.env.TIKTOK_CLIENT_KEY) {
+        console.error('TIKTOK_CLIENT_KEY is undefined!');
+        return {
+          statusCode: 500,
+          headers,
+          body: JSON.stringify({ 
+            error: 'TIKTOK_CLIENT_KEY environment variable is not set',
+            debug: {
+              TIKTOK_CLIENT_KEY: process.env.TIKTOK_CLIENT_KEY,
+              TIKTOK_CLIENT_SECRET: process.env.TIKTOK_CLIENT_SECRET ? 'SET' : 'UNDEFINED',
+              URL: process.env.URL
+            }
+          })
+        };
+      }
+      
       // Generate CSRF state token
       const csrfState = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
       
@@ -30,6 +54,8 @@ exports.handler = async function(event, context) {
       });
 
       const authUrl = `https://www.tiktok.com/v2/auth/authorize?${params.toString()}`;
+      
+      console.log('Generated auth URL:', authUrl);
       
       return {
         statusCode: 302,
@@ -79,6 +105,15 @@ exports.handler = async function(event, context) {
     }
 
     try {
+      // Debug: Log environment variables and parameters
+      console.log('Token exchange debug:', {
+        TIKTOK_CLIENT_KEY: process.env.TIKTOK_CLIENT_KEY ? 'SET' : 'UNDEFINED',
+        TIKTOK_CLIENT_SECRET: process.env.TIKTOK_CLIENT_SECRET ? 'SET' : 'UNDEFINED',
+        URL: process.env.URL,
+        code: code ? 'PRESENT' : 'MISSING',
+        redirect_uri: `${process.env.URL}/.netlify/functions/tiktok_auth`
+      });
+      
       // Exchange authorization code for access token
       const tokenResponse = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
         method: 'POST',
@@ -129,6 +164,21 @@ exports.handler = async function(event, context) {
         headers: { ...headers, 'Location': redirectUrl.toString() }
       };
     }
+  }
+
+  // Route 3: Debug endpoint to check environment variables
+  if (event.httpMethod === 'GET' && path.includes('/debug')) {
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({
+        message: 'Environment variables debug',
+        TIKTOK_CLIENT_KEY: process.env.TIKTOK_CLIENT_KEY ? 'SET' : 'UNDEFINED',
+        TIKTOK_CLIENT_SECRET: process.env.TIKTOK_CLIENT_SECRET ? 'SET' : 'UNDEFINED',
+        URL: process.env.URL || 'UNDEFINED',
+        timestamp: new Date().toISOString()
+      })
+    };
   }
 
   // Route not found
