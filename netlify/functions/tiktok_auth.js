@@ -1,154 +1,140 @@
-const axios = require('axios');
-
-/**
- * TikTok OAuth Proxy - Netlify Function
- * Handles secure token exchange for TikTok Login Kit
- * Implements CSRF protection, CORS, and proper error handling
- */
+const fetch = require('node-fetch');
 
 exports.handler = async function(event, context) {
-  // CORS Headers - Allow requests from your GitHub Pages site
+  // Enable CORS for your GitHub Pages domain
   const headers = {
-    'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
+    'Access-Control-Allow-Origin': 'https://killerkit09.github.io',
     'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Content-Type': 'application/json'
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   };
 
-  // Handle preflight OPTIONS request
   if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers,
-      body: ''
-    };
+    return { statusCode: 200, headers };
   }
 
-  // Only allow GET requests
-  if (event.httpMethod !== 'GET') {
-    return {
-      statusCode: 405,
-      headers,
-      body: JSON.stringify({ error: 'Method Not Allowed' })
-    };
-  }
+  const path = event.path || '';
+  
+  // Route 1: Initiate OAuth flow
+  if (event.httpMethod === 'GET' && path.includes('/oauth')) {
+    try {
+      // Generate CSRF state token
+      const csrfState = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      
+      // TikTok OAuth URL with required parameters
+      const params = new URLSearchParams({
+        client_key: process.env.TIKTOK_CLIENT_KEY,
+        scope: 'user.info.basic',
+        response_type: 'code',
+        redirect_uri: `${process.env.URL}/.netlify/functions/auth-tiktok/callback`,
+        state: csrfState,
+      });
 
-  // Extract query parameters
-  const { code, state } = event.queryStringParameters || {};
-
-  // Validate required parameters
-  if (!code) {
-    return {
-      statusCode: 400,
-      headers,
-      body: JSON.stringify({ error: 'Missing authorization code' })
-    };
-  }
-
-  // CSRF Protection: Validate state parameter
-  if (!state) {
-    return {
-      statusCode: 400,
-      headers,
-      body: JSON.stringify({ error: 'Missing state parameter - CSRF protection failed' })
-    };
-  }
-
-  // Validate environment variables
-  const clientKey = process.env.TIKTOK_CLIENT_KEY;
-  const clientSecret = process.env.TIKTOK_CLIENT_SECRET;
-  const redirectUri = process.env.REDIRECT_URI;
-
-  if (!clientKey || !clientSecret || !redirectUri) {
-    console.error('Missing required environment variables');
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: 'Server configuration error' })
-    };
-  }
-
-  // Prepare token exchange request
-  // TikTok accepts both JSON and form-urlencoded, using JSON for clarity
-  const tokenData = {
-    client_key: clientKey,
-    client_secret: clientSecret,
-    code: code,
-    grant_type: 'authorization_code',
-    redirect_uri: redirectUri
-  };
-
-  try {
-    // Exchange authorization code for access token
-    const response = await axios.post(
-      'https://open-api.tiktok.com/oauth/access_token/',
-      tokenData,
-      {
+      const authUrl = `https://www.tiktok.com/v2/auth/authorize?${params.toString()}`;
+      
+      return {
+        statusCode: 302,
         headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000 // 10 second timeout
-      }
-    );
-
-    // Check if TikTok returned an error
-    if (response.data.error || response.data.error_description) {
-      console.error('TikTok API Error:', response.data);
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({
-          error: response.data.error || 'token_exchange_failed',
-          error_description: response.data.error_description || 'Failed to exchange token'
-        })
+          ...headers,
+          'Location': authUrl,
+          'Set-Cookie': `csrfState=${csrfState}; HttpOnly; Secure; SameSite=Strict; Max-Age=300`
+        }
       };
-    }
-
-    // Return the token data along with the state for verification
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({
-        ...response.data,
-        state: state // Return state for frontend validation
-      })
-    };
-
-  } catch (error) {
-    console.error('Token exchange error:', error.message);
-    
-    // Handle different error types
-    if (error.response) {
-      // TikTok API returned an error response
-      return {
-        statusCode: error.response.status,
-        headers,
-        body: JSON.stringify({
-          error: 'tiktok_api_error',
-          error_description: error.response.data?.error_description || error.response.data?.message || 'TikTok API request failed',
-          details: error.response.data
-        })
-      };
-    } else if (error.request) {
-      // Request was made but no response received
-      return {
-        statusCode: 503,
-        headers,
-        body: JSON.stringify({
-          error: 'service_unavailable',
-          error_description: 'TikTok API is not responding'
-        })
-      };
-    } else {
-      // Something else went wrong
+      
+    } catch (error) {
+      console.error('OAuth initiation error:', error);
       return {
         statusCode: 500,
         headers,
-        body: JSON.stringify({
-          error: 'internal_error',
-          error_description: 'An unexpected error occurred'
-        })
+        body: JSON.stringify({ error: 'Failed to initiate OAuth flow' })
       };
     }
   }
+
+  // Route 2: Handle OAuth callback
+  if (event.httpMethod === 'GET' && path.includes('/callback')) {
+    const { code, state, error, error_description } = event.queryStringParameters || {};
+    
+    // Handle OAuth errors from TikTok
+    if (error) {
+      console.error('TikTok OAuth error:', error, error_description);
+      const redirectUrl = new URL('https://killerkit09.github.io/mytiktokanalytics-policies/callback.html');
+      redirectUrl.searchParams.set('error', error);
+      redirectUrl.searchParams.set('error_description', error_description || 'OAuth authorization failed');
+      
+      return {
+        statusCode: 302,
+        headers: { ...headers, 'Location': redirectUrl.toString() }
+      };
+    }
+
+    if (!code || !state) {
+      const redirectUrl = new URL('https://killerkit09.github.io/mytiktokanalytics-policies/callback.html');
+      redirectUrl.searchParams.set('error', 'missing_params');
+      redirectUrl.searchParams.set('error_description', 'Missing authorization code or state parameter');
+      
+      return {
+        statusCode: 302,
+        headers: { ...headers, 'Location': redirectUrl.toString() }
+      };
+    }
+
+    try {
+      // Exchange authorization code for access token
+      const tokenResponse = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          client_key: process.env.TIKTOK_CLIENT_KEY,
+          client_secret: process.env.TIKTOK_CLIENT_SECRET,
+          code,
+          grant_type: 'authorization_code',
+          redirect_uri: `${process.env.URL}/.netlify/functions/auth-tiktok/callback`,
+        }),
+      });
+
+      const tokenData = await tokenResponse.json();
+      
+      if (!tokenResponse.ok) {
+        console.error('Token exchange failed:', tokenData);
+        throw new Error(tokenData.error_description || `Token exchange failed: ${tokenResponse.status}`);
+      }
+
+      // Successful token exchange - redirect back to GitHub Pages
+      const redirectUrl = new URL('https://killerkit09.github.io/mytiktokanalytics-policies/callback.html');
+      redirectUrl.searchParams.set('access_token', tokenData.access_token);
+      redirectUrl.searchParams.set('open_id', tokenData.open_id);
+      redirectUrl.searchParams.set('scope', tokenData.scope);
+      redirectUrl.searchParams.set('expires_in', tokenData.expires_in.toString());
+      
+      // Include refresh token if provided
+      if (tokenData.refresh_token) {
+        redirectUrl.searchParams.set('refresh_token', tokenData.refresh_token);
+      }
+
+      return {
+        statusCode: 302,
+        headers: { ...headers, 'Location': redirectUrl.toString() }
+      };
+
+    } catch (error) {
+      console.error('Token exchange error:', error);
+      const redirectUrl = new URL('https://killerkit09.github.io/mytiktokanalytics-policies/callback.html');
+      redirectUrl.searchParams.set('error', 'token_exchange_failed');
+      redirectUrl.searchParams.set('error_description', error.message);
+      
+      return {
+        statusCode: 302,
+        headers: { ...headers, 'Location': redirectUrl.toString() }
+      };
+    }
+  }
+
+  // Route not found
+  return {
+    statusCode: 404,
+    headers,
+    body: JSON.stringify({ error: 'Not found', path: event.path })
+  };
 };
