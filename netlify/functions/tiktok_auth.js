@@ -3,7 +3,7 @@ const fetch = require('node-fetch');
 exports.handler = async function(event, context) {
   // Enable CORS for your GitHub Pages domain
   const headers = {
-    'Access-Control-Allow-Origin': 'https://killerkit09.github.io',
+    'Access-Control-Allow-Origin': 'https://blue-tuna-tiktok.netlify.app',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   };
@@ -25,7 +25,7 @@ exports.handler = async function(event, context) {
         client_key: process.env.TIKTOK_CLIENT_KEY,
         scope: 'user.info.basic',
         response_type: 'code',
-        redirect_uri: `${process.env.URL}/.netlify/functions/auth-tiktok/callback`,
+        redirect_uri: `${process.env.URL}/.netlify/functions/tiktok_auth`,
         state: csrfState,
       });
 
@@ -57,7 +57,7 @@ exports.handler = async function(event, context) {
     // Handle OAuth errors from TikTok
     if (error) {
       console.error('TikTok OAuth error:', error, error_description);
-      const redirectUrl = new URL('https://killerkit09.github.io/mytiktokanalytics-policies/callback.html');
+      const redirectUrl = new URL('https://blue-tuna-tiktok.netlify.app/');
       redirectUrl.searchParams.set('error', error);
       redirectUrl.searchParams.set('error_description', error_description || 'OAuth authorization failed');
       
@@ -68,7 +68,7 @@ exports.handler = async function(event, context) {
     }
 
     if (!code || !state) {
-      const redirectUrl = new URL('https://killerkit09.github.io/mytiktokanalytics-policies/callback.html');
+      const redirectUrl = new URL('https://blue-tuna-tiktok.netlify.app/');
       redirectUrl.searchParams.set('error', 'missing_params');
       redirectUrl.searchParams.set('error_description', 'Missing authorization code or state parameter');
       
@@ -90,7 +90,7 @@ exports.handler = async function(event, context) {
           client_secret: process.env.TIKTOK_CLIENT_SECRET,
           code,
           grant_type: 'authorization_code',
-          redirect_uri: `${process.env.URL}/.netlify/functions/auth-tiktok/callback`,
+          redirect_uri: `${process.env.URL}/.netlify/functions/tiktok_auth`,
         }),
       });
 
@@ -102,7 +102,7 @@ exports.handler = async function(event, context) {
       }
 
       // Successful token exchange - redirect back to GitHub Pages
-      const redirectUrl = new URL('https://killerkit09.github.io/mytiktokanalytics-policies/callback.html');
+      const redirectUrl = new URL('https://blue-tuna-tiktok.netlify.app/');
       redirectUrl.searchParams.set('access_token', tokenData.access_token);
       redirectUrl.searchParams.set('open_id', tokenData.open_id);
       redirectUrl.searchParams.set('scope', tokenData.scope);
@@ -120,7 +120,7 @@ exports.handler = async function(event, context) {
 
     } catch (error) {
       console.error('Token exchange error:', error);
-      const redirectUrl = new URL('https://killerkit09.github.io/mytiktokanalytics-policies/callback.html');
+      const redirectUrl = new URL('https://blue-tuna-tiktok.netlify.app/');
       redirectUrl.searchParams.set('error', 'token_exchange_failed');
       redirectUrl.searchParams.set('error_description', error.message);
       
